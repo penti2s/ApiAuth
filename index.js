@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const expressjwt = require('express-jwt');
+const { expressjwt }= require('express-jwt');
 require('dotenv').config()
 const User = require('./Models/user')
 
@@ -12,6 +12,7 @@ const app = express();
 
 app.use(express.json());
 
+const validateToken = expressjwt({ secret: process.env.JWT_SECRET, algorithms: ['HS256'] });
 const signToken = _id => jwt.sign({ _id }, process.env.JWT_SECRET, { expiresIn: '3h' });
 
 app.post('/register', async (req, res) => {
@@ -59,7 +60,33 @@ app.post('/login', async (req, res) => {
     }
 })
 
+const findAndAssignUser = async (req, res, next) => {
+    try{
+        const user = await User.findById(req.auth._id)
+        if(!user){
+            return res.status(401).end();
+        }
+        req.user = user
+        next()
+    }catch(error){
+        res.status(500).send(error.message);
+    }
+}
 
+const isAuthenticated = express.Router().use(validateToken, findAndAssignUser); //Centralizacion de middleware
+
+app.get('/validate', isAuthenticated , (req, res) => {
+    throw new Error('Error de prueba');
+    res.send(req.user)
+})
+app.use((err, req, res, next) => {
+    console.log('Manejo de errores', err.stack);
+    next(err);
+    res.status(500).send(err.message);
+})
+app.use((err, req, res, next) => {
+    res.send('Ocurrio un error')
+})
 
 app.listen(3000, () => {
     console.log('Server on port 3000');
